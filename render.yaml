@@ -16,7 +16,7 @@ services:
       - key: ADMIN_SIGNUP_CODE
         value: PROF-2026
       - key: CORS_ORIGIN
-        value: https://joineazy-task1.onrender.com
+        value: https://joineazy-task1-rbrm.onrender.com
 
 databases:
   - name: joineazy-db

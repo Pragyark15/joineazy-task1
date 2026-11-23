@@ -2,6 +2,9 @@
 
 A role-based full-stack web app where **students form groups and confirm assignment submissions**, and **professors create assignments and track each group's progress** on one dashboard.
 
+**Live demo:** https://joineazy-task1-rbrm.onrender.com (free tier, so the first load can take ~50s while it wakes up)
+Demo logins (password `password123`): professor `professor@joineazy.com` · student `aarav@student.com` · student without a group `isha@student.com`
+
 | Layer | Tech |
 |---|---|
 | Frontend | React 18, Vite, Tailwind CSS, React Router, Recharts |
