@@ -18,6 +18,7 @@ A role-based full-stack web app where **students form groups and confirm assignm
 ### Student
 - Register / log in (JWT).
 - Create a group and add members by **email or student ID**; the owner can add/remove members, members can leave, the owner can delete the group.
+- **Join an existing group** two ways: (a) enter the group's **join code** (owner shares it; joins instantly), or (b) **request to join** from the list of groups; the **group owner approves or rejects** under My Group → Join requests.
 - View every assignment visible to them (assigned to all, or specifically to their group) and open its **OneDrive link**.
 - **Two-step submission confirmation:** "Mark as submitted" → "Yes, I have submitted" → "Confirm submission". The server also requires an explicit `confirmed: true` flag, so the step cannot be bypassed by a stray request.
 - **Progress bar** and completion badges for the group; each card shows who confirmed and when.
@@ -111,9 +112,15 @@ All routes are prefixed with `/api`. Protected routes need `Authorization: Beare
 | Method | Path | Access | Description |
 |---|---|---|---|
 | GET | `/groups` | admin | All groups with members |
-| GET | `/groups/me` | student | The student's group, or `null` |
+| GET | `/groups/me` | student | The student's group (or `null`); owners also get `requests` and `joinCode` |
 | POST | `/groups` | student | `{name, members?: [emailOrId]}` – creator becomes owner |
 | POST | `/groups/:id/members` | owner | `{identifier}` – add by email or ID |
+| POST | `/groups/join` | student (no group) | `{code}` – join instantly with a join code |
+| POST | `/groups/:id/join-code` | owner | Regenerate the group's join code |
+| GET | `/groups/available` | student | All groups + whether I've requested to join |
+| POST / DELETE | `/groups/:id/requests` | student | Request to join / cancel my request |
+| POST | `/groups/:id/requests/:userId/approve` | owner | Approve a join request |
+| DELETE | `/groups/:id/requests/:userId` | owner | Reject a join request |
 | DELETE | `/groups/:id/members/:userId` | owner / self | Remove a member / leave |
 | DELETE | `/groups/:id` | owner | Delete group |
 
@@ -143,6 +150,8 @@ erDiagram
     USERS ||--o{ GROUPS : "owns"
     USERS ||--o| GROUP_MEMBERS : "is member (max 1 group)"
     GROUPS ||--|{ GROUP_MEMBERS : "has"
+    GROUPS ||--o{ GROUP_REQUESTS : "receives"
+    USERS ||--o{ GROUP_REQUESTS : "sends"
     USERS ||--o{ ASSIGNMENTS : "creates (admin)"
     ASSIGNMENTS ||--o{ ASSIGNMENT_GROUPS : "targets (if not assign_to_all)"
     GROUPS ||--o{ ASSIGNMENT_GROUPS : "targeted by"
@@ -162,6 +171,12 @@ erDiagram
         int id PK
         varchar name UK
         int owner_id FK
+        varchar join_code UK
+        timestamptz created_at
+    }
+    GROUP_REQUESTS {
+        int group_id PK,FK
+        int user_id PK,FK
         timestamptz created_at
     }
     GROUP_MEMBERS {
