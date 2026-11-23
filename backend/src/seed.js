@@ -5,6 +5,15 @@ const { pool, migrate, waitForDb } = require('./db');
 (async () => {
   await waitForDb();
   await migrate();
+  // --if-empty: only seed a fresh database (used on deploy so restarts never wipe real data)
+  if (process.argv.includes('--if-empty')) {
+    const { rows } = await pool.query('SELECT COUNT(*)::int AS n FROM users');
+    if (rows[0].n > 0) {
+      console.log('Database already has users; skipping seed.');
+      await pool.end();
+      return;
+    }
+  }
   await pool.query(
     'TRUNCATE submissions, assignment_groups, assignments, group_members, groups, users RESTART IDENTITY CASCADE'
   );

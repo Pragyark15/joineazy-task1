@@ -259,4 +259,5 @@ frontend/src
 - No email invitations (members are added directly by email/ID, as the brief allows).
 - No pagination (fine for class-sized data).
 - No rate limiting on auth endpoints; add `express-rate-limit` before real deployment.
-- Deploy: any container host (Render / Railway / Fly.io) works — deploy the two Dockerfiles plus a managed Postgres and set `DATABASE_URL`, `JWT_SECRET`, `ADMIN_SIGNUP_CODE`, `CORS_ORIGIN`.
+- **Deployment (Render):** production uses the root `Dockerfile`, a single container where a multi-stage build compiles the React app and Express serves it next to `/api`. Frontend and API share one origin, so no CORS or proxy config is needed. `render.yaml` is a Render Blueprint that provisions this web service plus a managed PostgreSQL database, wires `DATABASE_URL`, and generates `JWT_SECRET`. On boot the container runs `seed.js --if-empty`, so a fresh database gets demo data and restarts never wipe real data. Free-tier instances sleep when idle, so the first request can take ~50s.
+- Local multi-container setup (`docker-compose.yml`: nginx SPA + API + Postgres) is unchanged and still the recommended way to run the stack locally.
