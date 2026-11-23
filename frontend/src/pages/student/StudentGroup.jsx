@@ -43,15 +43,83 @@ function CreateGroup({ onCreated }) {
   );
 }
 
+function JoinWithCode({ onJoined }) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState('');
+  const submit = async (e) => {
+    e.preventDefault();
+    setError('');
+    try { await api.joinWithCode(code); onJoined(); } catch (err) { setError(err.message); }
+  };
+  return (
+    <form onSubmit={submit} className="card max-w-xl space-y-3">
+      <h2 className="font-semibold">Join with a code</h2>
+      <p className="text-xs text-slate-500">Ask your group owner for their join code — you'll join instantly.</p>
+      <ErrorBox message={error} />
+      <div className="flex gap-2">
+        <input aria-label="Join code" required maxLength={8} className="input uppercase tracking-widest" placeholder="e.g. 4F9A2C"
+          value={code} onChange={(e) => setCode(e.target.value)} />
+        <button className="btn-primary">Join</button>
+      </div>
+    </form>
+  );
+}
+
+function JoinGroups() {
+  const [groups, setGroups] = useState(null);
+  const [error, setError] = useState('');
+  const load = useCallback(() => {
+    api.availableGroups().then((r) => setGroups(r.groups)).catch((e) => setError(e.message));
+  }, []);
+  useEffect(load, [load]);
+
+  const act = async (fn) => {
+    setError('');
+    try { await fn(); load(); } catch (e) { setError(e.message); }
+  };
+
+  return (
+    <section className="card max-w-xl">
+      <h2 className="mb-1 font-semibold">Join an existing group</h2>
+      <p className="mb-3 text-xs text-slate-500">The group owner must approve your request.</p>
+      <ErrorBox message={error} />
+      {!groups ? <Spinner /> : groups.length === 0 ? (
+        <p className="text-sm text-slate-500">No groups exist yet — create the first one above.</p>
+      ) : (
+        <ul className="divide-y divide-slate-100">
+          {groups.map((g) => (
+            <li key={g.id} className="flex items-center justify-between gap-2 py-2.5">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{g.name}</p>
+                <p className="text-xs text-slate-500">Owner {g.ownerName} · {g.memberCount} member{g.memberCount === 1 ? '' : 's'}</p>
+              </div>
+              {g.requested ? (
+                <div className="flex items-center gap-2">
+                  <Badge tone="amber">Request pending</Badge>
+                  <button className="text-xs font-medium text-slate-500 hover:underline" onClick={() => act(() => api.cancelRequest(g.id))}>Cancel</button>
+                </div>
+              ) : (
+                <button className="btn-secondary !px-3 !py-1.5" onClick={() => act(() => api.requestJoin(g.id))}>Request to join</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default function StudentGroup() {
   const { user } = useAuth();
   const [group, setGroup] = useState(undefined);
+  const [requests, setRequests] = useState([]);
+  const [joinCode, setJoinCode] = useState(null);
   const [ident, setIdent] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
-    api.myGroup().then((r) => setGroup(r.group)).catch((e) => setError(e.message));
+    api.myGroup().then((r) => { setGroup(r.group); setRequests(r.requests || []); setJoinCode(r.joinCode); }).catch((e) => setError(e.message));
   }, []);
   useEffect(load, [load]);
 
@@ -67,7 +135,7 @@ export default function StudentGroup() {
       <>
         <PageHeader title="My Group" subtitle="You're not in a group yet." />
         <ErrorBox message={error} />
-        <div className="mt-4"><CreateGroup onCreated={load} /></div>
+        <div className="mt-4 space-y-6"><JoinWithCode onJoined={load} /><CreateGroup onCreated={load} /><JoinGroups /></div>
       </>
     );
   }
@@ -118,6 +186,37 @@ export default function StudentGroup() {
             ))}
           </ul>
         </section>
+
+        {isOwner && joinCode && (
+          <section className="card md:col-span-2">
+            <h2 className="mb-1 font-semibold">Group join code</h2>
+            <p className="mb-3 text-xs text-slate-500">Share this code — any student without a group can join instantly by entering it.</p>
+            <div className="flex flex-wrap items-center gap-3">
+              <code data-testid="join-code" className="rounded-lg bg-slate-100 px-4 py-2 text-lg font-bold tracking-widest">{joinCode}</code>
+              <button className="btn-secondary" onClick={() => navigator.clipboard?.writeText(joinCode)}>Copy</button>
+              <button className="btn-secondary" disabled={busy} onClick={() => run(() => api.newJoinCode(group.id))}>Generate new code</button>
+            </div>
+          </section>
+        )}
+        {isOwner && requests.length > 0 && (
+          <section className="card md:col-span-2">
+            <h2 className="mb-3 font-semibold">Join requests <Badge tone="amber">{requests.length}</Badge></h2>
+            <ul className="divide-y divide-slate-100">
+              {requests.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-2 py-2.5">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">{r.name}</p>
+                    <p className="truncate text-xs text-slate-500">{r.email}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="btn-primary !px-3 !py-1.5" disabled={busy} onClick={() => run(() => api.approveRequest(group.id, r.id))}>Approve</button>
+                    <button className="btn-secondary !px-3 !py-1.5" disabled={busy} onClick={() => run(() => api.rejectRequest(group.id, r.id))}>Reject</button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {isOwner && (
           <form onSubmit={add} className="card h-fit space-y-3">

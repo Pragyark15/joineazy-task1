@@ -69,7 +69,120 @@ router.get(
   asyncHandler(async (req, res) => {
     const { rows } = await query('SELECT group_id FROM group_members WHERE user_id = $1', [req.user.id]);
     const [group] = await loadGroups(rows.map((r) => r.group_id));
-    res.json({ group: group || null });
+    let requests = [];
+    let joinCode = null;
+    if (group && group.ownerId === req.user.id) {
+      joinCode = (await query('SELECT join_code FROM groups WHERE id = $1', [group.id])).rows[0].join_code;
+      const r = await query(
+        `SELECT u.id, u.name, u.email FROM group_requests gr JOIN users u ON u.id = gr.user_id
+         WHERE gr.group_id = $1 ORDER BY gr.created_at`,
+        [group.id]
+      );
+      requests = r.rows;
+    }
+    res.json({ group: group || null, requests, joinCode });
+  })
+);
+
+// Student without a group: browse existing groups and see which I've requested
+router.get(
+  '/available',
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const { rows } = await query(
+      `SELECT g.id, g.name, o.name AS owner_name,
+         (SELECT COUNT(*) FROM group_members gm WHERE gm.group_id = g.id)::int AS member_count,
+         EXISTS (SELECT 1 FROM group_requests gr WHERE gr.group_id = g.id AND gr.user_id = $1) AS requested
+       FROM groups g JOIN users o ON o.id = g.owner_id ORDER BY g.name`,
+      [req.user.id]
+    );
+    res.json({
+      groups: rows.map((r) => ({ id: r.id, name: r.name, ownerName: r.owner_name, memberCount: r.member_count, requested: r.requested })),
+    });
+  })
+);
+
+// Student: join instantly with a group's join code
+router.post(
+  '/join',
+  requireRole('student'),
+  validate(z.object({ code: z.string().trim().min(4).max(8) })),
+  asyncHandler(async (req, res) => {
+    const member = await query('SELECT 1 FROM group_members WHERE user_id = $1', [req.user.id]);
+    if (member.rowCount) throw new HttpError(409, 'You are already in a group');
+    const g = await query('SELECT id FROM groups WHERE join_code = $1', [req.body.code.toUpperCase()]);
+    if (!g.rows[0]) throw new HttpError(404, 'Invalid join code');
+    await query('INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)', [g.rows[0].id, req.user.id]);
+    await query('DELETE FROM group_requests WHERE user_id = $1', [req.user.id]);
+    const [group] = await loadGroups([g.rows[0].id]);
+    res.status(201).json({ group });
+  })
+);
+
+// Owner: issue a fresh join code (invalidates the old one)
+router.post(
+  '/:id/join-code',
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const group = await getOwnedGroup(Number(req.params.id), req.user.id);
+    const r = await query("UPDATE groups SET join_code = upper(substr(md5(random()::text), 1, 6)) WHERE id = $1 RETURNING join_code", [group.id]);
+    res.json({ joinCode: r.rows[0].join_code });
+  })
+);
+
+// Student: request to join a group
+router.post(
+  '/:id/requests',
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const groupId = Number(req.params.id);
+    const member = await query('SELECT 1 FROM group_members WHERE user_id = $1', [req.user.id]);
+    if (member.rowCount) throw new HttpError(409, 'You are already in a group');
+    const g = await query('SELECT 1 FROM groups WHERE id = $1', [groupId]);
+    if (!g.rowCount) throw new HttpError(404, 'Group not found');
+    await query('INSERT INTO group_requests (group_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING', [groupId, req.user.id]);
+    res.status(201).json({ requested: true });
+  })
+);
+
+// Student: cancel my request
+router.delete(
+  '/:id/requests',
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    await query('DELETE FROM group_requests WHERE group_id = $1 AND user_id = $2', [Number(req.params.id), req.user.id]);
+    res.status(204).end();
+  })
+);
+
+// Owner: approve a request
+router.post(
+  '/:id/requests/:userId/approve',
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const group = await getOwnedGroup(Number(req.params.id), req.user.id);
+    const uid = Number(req.params.userId);
+    const pending = await query('SELECT 1 FROM group_requests WHERE group_id = $1 AND user_id = $2', [group.id, uid]);
+    if (!pending.rowCount) throw new HttpError(404, 'No such request');
+    const taken = await query('SELECT 1 FROM group_members WHERE user_id = $1', [uid]);
+    if (taken.rowCount) {
+      await query('DELETE FROM group_requests WHERE user_id = $1', [uid]);
+      throw new HttpError(409, 'That student has already joined another group');
+    }
+    await query('INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)', [group.id, uid]);
+    await query('DELETE FROM group_requests WHERE user_id = $1', [uid]);
+    res.status(204).end();
+  })
+);
+
+// Owner: reject a request
+router.delete(
+  '/:id/requests/:userId',
+  requireRole('student'),
+  asyncHandler(async (req, res) => {
+    const group = await getOwnedGroup(Number(req.params.id), req.user.id);
+    await query('DELETE FROM group_requests WHERE group_id = $1 AND user_id = $2', [group.id, Number(req.params.userId)]);
+    res.status(204).end();
   })
 );
 
@@ -109,6 +222,7 @@ router.post(
       for (const uid of [req.user.id, ...users.map((u) => u.id)]) {
         await client.query('INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)', [groupId, uid]);
       }
+      await client.query('DELETE FROM group_requests WHERE user_id = ANY($1::int[])', [[req.user.id, ...users.map((u) => u.id)]]);
       await client.query('COMMIT');
     } catch (err) {
       await client.query('ROLLBACK');
@@ -135,6 +249,7 @@ router.post(
     const taken = await query('SELECT 1 FROM group_members WHERE user_id = $1', [user.id]);
     if (taken.rowCount) throw new HttpError(409, `${user.name} is already in a group`);
     await query('INSERT INTO group_members (group_id, user_id) VALUES ($1,$2)', [group.id, user.id]);
+    await query('DELETE FROM group_requests WHERE user_id = $1', [user.id]);
     const [updated] = await loadGroups([group.id]);
     res.status(201).json({ group: updated });
   })

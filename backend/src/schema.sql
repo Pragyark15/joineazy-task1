@@ -53,3 +53,15 @@ CREATE TABLE IF NOT EXISTS submissions (
 
 CREATE INDEX IF NOT EXISTS idx_submissions_group ON submissions(group_id);
 CREATE INDEX IF NOT EXISTS idx_assignment_groups_group ON assignment_groups(group_id);
+
+-- Pending requests from students without a group to join an existing group.
+CREATE TABLE IF NOT EXISTS group_requests (
+  group_id   INTEGER NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (group_id, user_id)
+);
+
+-- Shareable join code: a student without a group who enters it joins immediately.
+ALTER TABLE groups ADD COLUMN IF NOT EXISTS join_code VARCHAR(8) NOT NULL DEFAULT upper(substr(md5(random()::text), 1, 6));
+CREATE UNIQUE INDEX IF NOT EXISTS idx_groups_join_code ON groups(join_code);

@@ -38,6 +38,13 @@ export const api = {
   createGroup: (b) => request('/groups', { method: 'POST', body: b }),
   addMember: (gid, identifier) => request(`/groups/${gid}/members`, { method: 'POST', body: { identifier } }),
   removeMember: (gid, uid) => request(`/groups/${gid}/members/${uid}`, { method: 'DELETE' }),
+  joinWithCode: (code) => request('/groups/join', { method: 'POST', body: { code } }),
+  newJoinCode: (gid) => request(`/groups/${gid}/join-code`, { method: 'POST' }),
+  availableGroups: () => request('/groups/available'),
+  requestJoin: (gid) => request(`/groups/${gid}/requests`, { method: 'POST' }),
+  cancelRequest: (gid) => request(`/groups/${gid}/requests`, { method: 'DELETE' }),
+  approveRequest: (gid, uid) => request(`/groups/${gid}/requests/${uid}/approve`, { method: 'POST' }),
+  rejectRequest: (gid, uid) => request(`/groups/${gid}/requests/${uid}`, { method: 'DELETE' }),
   deleteGroup: (gid) => request(`/groups/${gid}`, { method: 'DELETE' }),
   // assignments
   assignments: () => request('/assignments'),
