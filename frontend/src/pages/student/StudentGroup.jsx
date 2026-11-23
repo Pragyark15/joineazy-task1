@@ -54,7 +54,7 @@ function JoinWithCode({ onJoined }) {
   return (
     <form onSubmit={submit} className="card max-w-xl space-y-3">
       <h2 className="font-semibold">Join with a code</h2>
-      <p className="text-xs text-slate-500">Ask your group owner for their join code — you'll join instantly.</p>
+      <p className="text-xs text-slate-500">Ask your group owner for their join code â€” you'll join instantly.</p>
       <ErrorBox message={error} />
       <div className="flex gap-2">
         <input aria-label="Join code" required maxLength={8} className="input uppercase tracking-widest" placeholder="e.g. 4F9A2C"
@@ -84,14 +84,14 @@ function JoinGroups() {
       <p className="mb-3 text-xs text-slate-500">The group owner must approve your request.</p>
       <ErrorBox message={error} />
       {!groups ? <Spinner /> : groups.length === 0 ? (
-        <p className="text-sm text-slate-500">No groups exist yet — create the first one above.</p>
+        <p className="text-sm text-slate-500">No groups exist yet â€” create the first one above.</p>
       ) : (
         <ul className="divide-y divide-slate-100">
           {groups.map((g) => (
             <li key={g.id} className="flex items-center justify-between gap-2 py-2.5">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{g.name}</p>
-                <p className="text-xs text-slate-500">Owner {g.ownerName} · {g.memberCount} member{g.memberCount === 1 ? '' : 's'}</p>
+                <p className="text-xs text-slate-500">Owner {g.ownerName} Â· {g.memberCount} member{g.memberCount === 1 ? '' : 's'}</p>
               </div>
               {g.requested ? (
                 <div className="flex items-center gap-2">
@@ -190,7 +190,7 @@ export default function StudentGroup() {
         {isOwner && joinCode && (
           <section className="card md:col-span-2">
             <h2 className="mb-1 font-semibold">Group join code</h2>
-            <p className="mb-3 text-xs text-slate-500">Share this code — any student without a group can join instantly by entering it.</p>
+            <p className="mb-3 text-xs text-slate-500">Share this code â€” any student without a group can join instantly by entering it.</p>
             <div className="flex flex-wrap items-center gap-3">
               <code data-testid="join-code" className="rounded-lg bg-slate-100 px-4 py-2 text-lg font-bold tracking-widest">{joinCode}</code>
               <button className="btn-secondary" onClick={() => navigator.clipboard?.writeText(joinCode)}>Copy</button>
